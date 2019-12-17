@@ -1,0 +1,180 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>巷道查看</title>
+    <style>
+        body{
+            overflow: hidden;
+        }
+        #sketchpad {
+            margin: 0;
+            background-color: #2e2e2e;
+        }
+    </style>
+</head>
+<body>
+    <div id="control">
+        <input type="file" id="files" style="display: none" onchange="fileImport();">
+        <input type="button" id="fileImport" value="导入几何数据">
+    </div>
+    <div id = "sketchpad">    </div>
+
+    <script src="jquery.js"></script>
+    <script src="three.js"></script>
+    <script src=" EditorControls.js"></script>
+    <script>
+        let tunnelGeos = [];
+        let nodeGeos = [];
+        let flag = false;
+
+        //点击导入按钮,使files触发点击事件,然后完成读取文件的操作
+        $("#fileImport").click(function () {
+            $("#files").click();
+        });
+        function fileImport() {
+            //获取读取我文件的File对象
+            let selectedFile = document.getElementById('files').files[0];
+
+            let reader = new FileReader();//这是核心,读取操作就是由它完成.
+            reader.readAsText(selectedFile,"gb2312");//读取文件的内容,也可以读取文件的URL
+            reader.onload = function () {
+                //当读取完成后回调这个函数,然后此时文件的内容存储到了result中,直接操作即可
+                let strData = this.result;
+                let objData = JSON.parse(strData);
+                console .log(objData);
+
+
+                objData.forEach((e)=>{
+
+                    if(e.Type === "Tunnel")
+                    {
+                        let faces = [];
+                        let vertices = [];
+                        let colors = [];
+                        e.VerticeList.forEach((t)=>{
+                            vertices.push(new THREE.Vector3(t.X,t.Y,t.Z));
+                        });
+
+                        e.ColorList.forEach((t)=>{
+                            colors.push(new THREE.Color(t))
+                        });
+
+                        e.FaceList.forEach((t)=>{
+                            let face = new THREE.Face3(t[0],t[1],t[2]);
+                            face.vertexColors[0] = colors[t[0]];
+                            face.vertexColors[1] = colors[t[1]];
+                            face.vertexColors[2] = colors[t[2]];
+                            faces.push(face)
+                        });
+
+                        let geometry = new THREE.Geometry();
+                        geometry.vertices = vertices;
+                        geometry.faces = faces;
+                        geometry.colors = colors;
+                        tunnelGeos.push(geometry);
+                    }
+                    else if(e.Type === "Node")
+                    {
+                        let geometry = new THREE.SphereGeometry( e.Radius, 50, 50 );
+                        geometry.translate(e.Position.X,e.Position.Y,e.Position.Z);
+                        nodeGeos.push({Geometry:geometry,color:e.NodeColor});
+                    }
+
+
+                });
+                flag = true;
+                init();
+                animate();
+            }
+        }
+
+        let camera, scene, renderer,sceneHelpers;
+        let mesh;
+
+
+
+        function init() {
+
+            renderer = new THREE.WebGLRenderer({antialias:true});
+            renderer.autoClear = false;
+            renderer.autoUpdateScene = false;
+            renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.setSize( window.innerWidth, window.innerHeight );
+            $("#sketchpad").append( renderer.domElement );
+
+            camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 100000 );
+            camera.position.z = 400;
+
+            new THREE.EditorControls(camera,$("#sketchpad")[0]); //调用视角移动
+
+            scene = new THREE.Scene();
+            sceneHelpers =new THREE.Scene();
+
+            scene.background = new THREE.Color( 0xaaaaaa );
+
+            let ambietLight =  new THREE.AmbientLight(0xffffff); //自然光
+            scene.add(ambietLight);
+
+            let spotLight1 = new THREE.SpotLight( 0xffffff ); //点光源
+            spotLight1.position.set( -40, 5000, 50 );
+            spotLight1.castShadow = true;
+            scene.add( spotLight1 );
+
+            let spotLight2 = new THREE.SpotLight( 0xffffff ); //点光源
+            spotLight2.position.set( -40,-5000, 50 );
+            spotLight2.castShadow = true;
+            scene.add( spotLight2 );
+
+            let grid = new THREE.GridHelper( 60000, 60 );
+            grid.rotation.x = Math.PI/2;
+            sceneHelpers.add( grid );
+
+
+
+            tunnelGeos.forEach((e)=>{
+                let geometry = e;
+                let material = new THREE.MeshBasicMaterial({
+                    side:THREE.DoubleSide,
+                    vertexColors: THREE.VertexColors });
+                mesh = new THREE.Mesh( geometry, material );
+                scene.add( mesh );
+            });
+
+            nodeGeos.forEach((e)=>{
+                let geometry = e.Geometry;
+                let material = new THREE.MeshLambertMaterial({color:e.color});
+                mesh = new THREE.Mesh( geometry, material );
+                scene.add( mesh );
+            });
+
+
+            window.addEventListener( 'resize', onWindowResize, false );
+
+        }
+
+        function onWindowResize() {
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize( window.innerWidth, window.innerHeight );
+
+        }
+
+        function animate() {
+
+            requestAnimationFrame( animate );
+
+            if(flag)
+            {
+                renderer.render( scene, camera );
+                renderer.render( sceneHelpers, camera );
+            }
+
+        }
+
+
+    </script>
+</body>
+</html>
